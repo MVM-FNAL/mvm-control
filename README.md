@@ -5,19 +5,19 @@ Script to control the Mechanical Ventilator Milano
 ## Usage
 
 - To set a parameter
-`python mvm_control.py set <param> <value>`
+`mvm-control set <param> <value>`
 
 - To get a parameter
-`python mvm_control.py get <param>`
+`mvm-control get <param>`
 
 - To log (don't pass a filename to log to stdout)
-`python mvm_control.py log <file>`
+`mvm-control log <file>`
 
 - To log at a 20 Hz rate to a file
-`python mvm_control.py -r 20 log > my_log_file.json`
+`mvm-control -r 20 log > my_log_file.json`
 
 - To set a parameter on a device on a specific serial port
-`python mvm_control.py -p /dev/ttyUSB1 set run 1`
+`mvm-control -p /dev/ttyUSB1 set run 1`
 
 ## Example log output
 
