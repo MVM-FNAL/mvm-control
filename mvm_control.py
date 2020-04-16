@@ -242,7 +242,7 @@ def main():
     global rate
 
     try:
-        parser = argparse.ArgumentParser(prog='read_mvm_data')
+        parser = argparse.ArgumentParser(prog='mvm-control')
         parser.add_argument(
             '--port', '-p',
             default="/dev/ttyUSB0",
@@ -306,10 +306,13 @@ def main():
         exit(-1)
 
     # Run requested subcommand function
+    # This is a fix for python3 + argparse...
     try:
-        args.func(args)
-    except Exception as e:
-        print(e)
+        func = args.func
+    except AttributeError:
+        parser.error("too few arguments")
+
+    func(args)
 
     exit(0)
 
