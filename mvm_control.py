@@ -25,7 +25,7 @@ Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
 """
 
-__version__ = '1.0.2'
+__version__ = '1.0.3'
 
 import serial
 import time
@@ -146,6 +146,8 @@ def cmd_get(args):
 
 
 def cmd_set(args):
+    global verbose
+
     """Set command wrapper"""
     result = set_mvm_param(ser, args.param, args.value)
     if result is not False:
@@ -159,6 +161,8 @@ def cmd_log(args):
     """Log command wrapper"""
     global terminate
     global ser
+    global rate
+    global verbose
     with args.logfile as log_file:
         # Step one, gather up the settings!
         settings = [
@@ -233,6 +237,10 @@ def cmd_log(args):
 
 
 def main():
+    global ser
+    global verbose
+    global rate
+
     try:
         parser = argparse.ArgumentParser(prog='read_mvm_data')
         parser.add_argument(
