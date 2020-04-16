@@ -244,6 +244,10 @@ def main():
     try:
         parser = argparse.ArgumentParser(prog='mvm-control')
         parser.add_argument(
+            '--version',
+            action='version',
+            version='%(prog)s ' + __version__)
+        parser.add_argument(
             '--port', '-p',
             default="/dev/ttyUSB0",
             help="Serial port to connect to")

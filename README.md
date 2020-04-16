@@ -2,6 +2,14 @@
 
 Script to control the Mechanical Ventilator Milano
 
+## Installation
+
+To install `pip install mvm-control`
+
+## Upgrade
+
+To upgrade `pip install -U mvm-control`
+
 ## Usage
 
 - To set a parameter

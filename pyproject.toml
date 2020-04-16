@@ -7,7 +7,9 @@ module = "mvm_control"
 dist-name = "mvm-control"
 author = "Bryerton Shaw"
 author-email = "bryerton@triumf.ca"
-home-page = "https://github.com/bryerton/mvm-control"
+description-file = "README.md"
+license = "GPL"
+home-page = "https://github.com/MechanicalVentilatorMilano/mvm-control"
 classifiers = ["License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"]
 requires = [
     'argparse'
