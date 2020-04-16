@@ -146,9 +146,9 @@ def cmd_get(args):
 
 
 def cmd_set(args):
+    """Set command wrapper"""
     global verbose
 
-    """Set command wrapper"""
     result = set_mvm_param(ser, args.param, args.value)
     if result is not False:
         if(verbose):
