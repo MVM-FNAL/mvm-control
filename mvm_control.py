@@ -25,7 +25,7 @@ Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
 """
 
-__version__ = '1.0.0'
+__version__ = '1.0.2'
 
 import serial
 import time
@@ -62,7 +62,7 @@ choices_for_set = [
 # Verbosity option
 verbose = False
 rate = 10
-
+ser = None
 terminate = False
 
 
@@ -158,7 +158,7 @@ def cmd_set(args):
 def cmd_log(args):
     """Log command wrapper"""
     global terminate
-
+    global ser
     with args.logfile as log_file:
         # Step one, gather up the settings!
         settings = [
@@ -232,74 +232,79 @@ def cmd_log(args):
     exit(0)
 
 
-try:
-    parser = argparse.ArgumentParser(prog='read_mvm_data')
-    parser.add_argument(
-        '--port', '-p',
-        default="/dev/ttyUSB0",
-        help="Serial port to connect to")
-    parser.add_argument(
-        '--rate', '-r',
-        default=10,
-        type=int,
-        help="Default logging rate")
-    parser.add_argument(
-        '--verbose', '-v',
-        action='store_true',
-        help="Add verbose response, useful for debugging")
-    subparsers = parser.add_subparsers(
-        title='Subcommands',
-        help='Commands available')
-
-    # Get command
-    parser_get = subparsers.add_parser('get', help="get <param>")
-    parser_get.add_argument("param", choices=choices_for_get)
-    parser_get.set_defaults(func=cmd_get)
-
-    # Set command
-    parser_set = subparsers.add_parser('set', help="set <param> <value>")
-    parser_set.add_argument("param", choices=choices_for_set)
-    parser_set.add_argument("value")
-    parser_set.set_defaults(func=cmd_set)
-
-    # Log command
-    parser_log = subparsers.add_parser('log', help="log <file>")
-    parser_log.add_argument(
-        'logfile',
-        nargs='?',
-        type=argparse.FileType('w+'),
-        default=sys.stdout,
-        help="Optional, leave blank for stdout")
-    parser_log.set_defaults(func=cmd_log)
-
-    args = parser.parse_args()
-    verbose = args.verbose
+def main():
     try:
-        rate = 1 / args.rate
+        parser = argparse.ArgumentParser(prog='read_mvm_data')
+        parser.add_argument(
+            '--port', '-p',
+            default="/dev/ttyUSB0",
+            help="Serial port to connect to")
+        parser.add_argument(
+            '--rate', '-r',
+            default=10,
+            type=int,
+            help="Default logging rate")
+        parser.add_argument(
+            '--verbose', '-v',
+            action='store_true',
+            help="Add verbose response, useful for debugging")
+        subparsers = parser.add_subparsers(
+            title='Subcommands',
+            help='Commands available')
+
+        # Get command
+        parser_get = subparsers.add_parser('get', help="get <param>")
+        parser_get.add_argument("param", choices=choices_for_get)
+        parser_get.set_defaults(func=cmd_get)
+
+        # Set command
+        parser_set = subparsers.add_parser('set', help="set <param> <value>")
+        parser_set.add_argument("param", choices=choices_for_set)
+        parser_set.add_argument("value")
+        parser_set.set_defaults(func=cmd_set)
+
+        # Log command
+        parser_log = subparsers.add_parser('log', help="log <file>")
+        parser_log.add_argument(
+            'logfile',
+            nargs='?',
+            type=argparse.FileType('w+'),
+            default=sys.stdout,
+            help="Optional, leave blank for stdout")
+        parser_log.set_defaults(func=cmd_log)
+
+        args = parser.parse_args()
+        verbose = args.verbose
+        try:
+            rate = 1 / args.rate
+        except Exception:
+            rate = 0.1
+
+    except Exception as e:
+        print(e)
+        exit(-1)
+
+    # Try to establish connection with ESP32
+    try:
+        ser = serial.Serial(
+            args.port,
+            baudrate=115200,
+            bytesize=8,
+            parity='N',
+            stopbits=1,
+            timeout=2)
     except Exception:
-        rate = 0.1
+        print("Failed to connect to serial port " + args.port)
+        exit(-1)
 
-except Exception as e:
-    print(e)
-    exit(-1)
+    # Run requested subcommand function
+    try:
+        args.func(args)
+    except Exception as e:
+        print(e)
 
-# Try to establish connection with ESP32
-try:
-    ser = serial.Serial(
-        args.port,
-        baudrate=115200,
-        bytesize=8,
-        parity='N',
-        stopbits=1,
-        timeout=2)
-except Exception:
-    print("Failed to connect to serial port " + args.port)
-    exit(-1)
+    exit(0)
 
-# Run requested subcommand function
-try:
-    args.func(args)
-except Exception as e:
-    print(e)
 
-exit(0)
+if __name__ == "__main__":
+    main()
