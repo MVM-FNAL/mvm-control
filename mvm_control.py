@@ -25,7 +25,7 @@ Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
 """
 
-__version__ = '1.0.3'
+__version__ = '1.0.4'
 
 import serial
 import time
