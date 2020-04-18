@@ -18,6 +18,11 @@ The log format is as follows:
     ]
 }
 
+The config format is simple the same as the log, with no 'data' field:
+{
+    "settings": { ... }
+}
+
 Where "settings" is a JSON object containing reasonable settings to store (at
 the time of this writing)
 
@@ -25,7 +30,7 @@ Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
 """
 
-__version__ = '1.1.0'
+__version__ = '1.2.0'
 
 import serial
 import time
@@ -82,10 +87,9 @@ def signal_handling(signum, frame):
 signal.signal(signal.SIGINT, signal_handling)
 
 
-def set_log_settings(args):
+def set_log_settings(log_file, verbose=False):
     try:
-        with open(args.use_log, "r") as prev_log_file:
-            prev_log = json.load(prev_log_file)
+        prev_log = json.load(log_file)
     except Exception as e:
         print(e)
         exit(-1)
@@ -94,7 +98,7 @@ def set_log_settings(args):
     for setting in settings_to_load:
         # Write all settable settings back to ESP32
         if setting in choices_for_set:
-            if args.logfile is not sys.stdout:
+            if verbose:
                 print("Setting " + setting + " to " +
                       str(settings_to_load[setting]))
             set_mvm_param(ser, setting, settings_to_load[setting])
@@ -110,19 +114,31 @@ def get_log_settings(settings_to_store):
     return settings_resp
 
 
-def _parse_response(response):
+def _parse_response(ser):
     """Parse a response and check if its valid from the ESP32, format is
     'valore=...'"""
-    response = response.strip()  # Remove the terminator(s)
-    try:
-        check, value = response.decode('utf-8').split('=')
-        if(check.lower() == 'valore'):
-            return value
-        else:
-            return False
-    except Exception:
-        print("Error parsing response! (" + str(response) + ")")
-        return False
+    # Sometimes the simpliest solution is best
+    # Since we don't know how many messages might have snuck in
+    # Or been sent (like a device failure log message)
+    # Just skip anything that doesn't work for a bit
+
+    # This might seem absurd, but I need it for my setup with no flow sense
+    MAX_RESP_TRIES = 200  # Worst case, no sensors, 170 tries needed
+    num_tries = 0
+    while(num_tries < MAX_RESP_TRIES):
+        # Remove the terminator(s)
+        # Use read_until() as it should time out
+        response = ser.read_until().decode('utf-8').strip()
+        try:
+            if(response is not None):
+                check, value = response.split('=')
+                if(check.lower() == 'valore'):
+                    return value
+        except Exception:
+            pass
+
+        num_tries = num_tries + 1
+    return False
 
 
 def get_mvm_param(ser, param):
@@ -130,7 +146,7 @@ def get_mvm_param(ser, param):
     try:
         request = 'get ' + str(param) + '\r\n'
         ser.write(request.encode('utf-8'))
-        response = _parse_response(ser.readline())
+        response = _parse_response(ser)
     except Exception as e:
         print("Error communicating with device")
         print(e)
@@ -152,18 +168,7 @@ def set_mvm_param(ser, param, value):
     try:
         request = 'set ' + str(param) + ' ' + str(value) + '\r\n'
         ser.write(request.encode('utf-8'))
-        # Ugly hack to deal with the buffer filled with console logs
-        if(param == "console" and int(value) == 0):
-            while True:
-                response = ser.read_until().strip().lower()
-                if(response == "valore=ok"):
-                    response = _parse_response(response)
-                    break
-                elif(response is None):
-                    break
-                time.sleep(0.1)
-        else:
-            response = _parse_response(ser.readline())
+        response = _parse_response(ser)
     except Exception as e:
         print("Error communicating with device")
         print(e)
@@ -218,8 +223,8 @@ def cmd_log(args):
         verbose = False
 
     # Should we configure the ESP32 with settings from a previous logfile?
-    if(args.use_log is not None):
-        set_log_settings(args)
+    if(args.use_cfg is not None):
+        set_log_settings(args.use_cfg, verbose)
 
     # Run through the dict getting our responses
     settings_resp = get_log_settings(settings_to_store)
@@ -290,8 +295,8 @@ def cmd_console_log(args):
         verbose = False
 
     # Should we configure the ESP32 with settings from a previous logfile?
-    if(args.use_log is not None):
-        set_log_settings(args)
+    if(args.use_cfg is not None):
+        set_log_settings(args.use_cfg)
 
     # Run through the dict getting our responses
     settings_resp = get_log_settings(settings_to_store)
@@ -316,7 +321,10 @@ def cmd_console_log(args):
         # Ugly, but split up the data and use some sort of name that makes
         # sense the variable names used inside the Arduino code are a bit
         # hard to parse/grok
-        resp = ser.readline().strip()
+
+        # Can't use 'get' call here, as console log just spews out messages
+        # unrequested
+        resp = ser.read_until().decode('utf-8').strip()
         if(verbose):
             print(resp)
         data_split = resp.split(',')
@@ -355,11 +363,15 @@ def cmd_console_log(args):
 
 
 def cmd_load(args):
-    pass
+    set_log_settings(args.cfgfile)
 
 
 def cmd_save(args):
-    pass
+    settings = get_log_settings(settings_to_store)
+    args.cfgfile.write('{"settings": ')
+    args.cfgfile.write(json.dumps(settings))
+    args.cfgfile.write('}')
+    args.cfgfile.close()
 
 
 def main():
@@ -376,12 +388,8 @@ def main():
         parser.add_argument(
             '--port', '-p',
             default="/dev/ttyUSB0",
+            metavar="<port>",
             help="Serial port to connect to")
-        parser.add_argument(
-            '--rate', '-r',
-            default=10,
-            type=int,
-            help="Default logging rate")
         parser.add_argument(
             '--verbose', '-v',
             action='store_true',
@@ -391,42 +399,72 @@ def main():
             help='Commands available')
 
         # Get command
-        parser_get = subparsers.add_parser('get', help="get <param>")
-        parser_get.add_argument("param", choices=choices_for_get)
+        parser_get = subparsers.add_parser(
+            'get',
+            help="get <param>",
+            usage="%(prog)s <param>")
+        parser_get.add_argument(
+            "param",
+            choices=choices_for_get,
+            help=' '.join(choices_for_get),
+            metavar='param')
         parser_get.set_defaults(func=cmd_get)
 
         # Set command
-        parser_set = subparsers.add_parser('set', help="set <param> <value>")
-        parser_set.add_argument("param", choices=choices_for_set)
-        parser_set.add_argument("value")
+        parser_set = subparsers.add_parser(
+            'set',
+            usage="%(prog)s <param> <value>",
+            help="set <param> <value>")
+        parser_set.add_argument(
+            "param",
+            choices=choices_for_set,
+            help=' '.join(choices_for_set),
+            metavar="param")
+        parser_set.add_argument(
+            "value",
+            help="Value to set")
         parser_set.set_defaults(func=cmd_set)
 
         # Load configuration command
         parser_load = subparsers.add_parser(
-            'load', help="load configuration into ESP32")
+            'load',
+            usage="%(prog)s <file>",
+            help="load <file>")
         parser_load.add_argument(
             'cfgfile',
-            nargs='?',
             type=argparse.FileType('r'),
-            default=sys.stdin,
-            help="Optional, leave blank for stdin")
+            help="JSON configuration to load")
         parser_load.set_defaults(func=cmd_load)
 
         # Save configuration command
         parser_save = subparsers.add_parser(
-            'save', help="save configuration from ESP32")
+            'save',
+            usage="%(prog)s -<file>",
+            help="save <file>")
         parser_save.add_argument(
             'cfgfile',
-            nargs='?',
             type=argparse.FileType('w+'),
-            default=sys.stdout,
-            help="Optional, leave blank for stdout")
+            help="File to save configuration to")
         parser_save.set_defaults(func=cmd_save)
 
         # Log command
-        parser_log = subparsers.add_parser('log', help="log <file>")
+        parser_log = subparsers.add_parser(
+            'log',
+            usage="%(prog)s [option] <file>",
+            help="log [option] <file>")
         parser_log.add_argument(
-            '-u', '--use-log', help="Use previous log file to setup ESP32")
+            '-r',
+            '--rate',
+            default=10,
+            type=int,
+            metavar="<rate>",
+            help="Logging rate in hertz")
+        parser_log.add_argument(
+            '-u',
+            '--use-cfg',
+            metavar="<file>",
+            type=argparse.FileType('r'),
+            help="Use config file or previous log to configure device")
         parser_log.add_argument(
             'logfile',
             nargs='?',
@@ -436,9 +474,16 @@ def main():
         parser_log.set_defaults(func=cmd_log)
 
         # 'Console' Log command
-        parser_clog = subparsers.add_parser('console_log', help="log <file>")
+        parser_clog = subparsers.add_parser(
+            'clog',
+            usage="%(prog)s [option] <file>",
+            help="clog [option] <file>")
         parser_clog.add_argument(
-            '-u', '--use-log', help="Use previous log file to setup ESP32")
+            '-u',
+            '--use-cfg',
+            metavar="<file>",
+            type=argparse.FileType('r'),
+            help="Use config file or previous log to configure device")
         parser_clog.add_argument(
             'logfile',
             nargs='?',
@@ -460,13 +505,19 @@ def main():
 
     # Try to establish connection with ESP32
     try:
-        ser = serial.Serial(
+        ser = serial.serial_for_url(
             args.port,
             baudrate=115200,
             bytesize=8,
             parity='N',
             stopbits=1,
+            rtscts=False,
+            dsrdtr=True,
+            do_not_open=True,
             timeout=0.5)
+        ser.rts = 0
+        ser.dtr = 1
+        ser.open()
     except Exception:
         print("Failed to connect to serial port " + args.port)
         exit(-1)

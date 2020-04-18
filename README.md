@@ -4,30 +4,119 @@ Script to control the Mechanical Ventilator Milano
 
 ## Installation
 
-To install `pip install mvm-control`
+To install
+
+   `pip install mvm-control`
 
 ## Upgrade
 
-To upgrade `pip install -U mvm-control`
+To upgrade
+
+   `pip install -U mvm-control`
 
 ## Usage
 
-- To set a parameter
+`mvm-control [options] <subcommand> [sub options] ...`
+
+The following subcommands are available:
+
+- set
+- get
+- load
+- save
+- log
+- clog
+
+### Example
+
+`mvm-control -p /dev/ttyUSB0 log run_001.json`
+
+### Options
+
+  - Increase the verbosity of output
+
+	`-v / --verbose`
+  - Specify the serial port to use
+
+    `-p / --port <port>`
+  - Print the version out and exit
+
+	`--version`
+
+### Set
+
+Sets a parameter on the ESP32
+
 `mvm-control set <param> <value>`
 
-- To get a parameter
+#### Example
+
+`mvm-control set mode 1`
+
+### Get
+
+Gets a parameter on the ESP32 and return its string value
+
 `mvm-control get <param>`
 
-- To log (don't pass a filename to log to stdout)
+#### Example
+
+`mvm-control get mode`
+
+### Log
+
+Logs the ESP32 response to `get all` to a file, hit CTRL+C to break.
+
 `mvm-control log <file>`
 
-- To log at a 20 Hz rate to a file
-`mvm-control -r 20 log > my_log_file.json`
+#### Options
 
-- To set a parameter on a device on a specific serial port
-`mvm-control -p /dev/ttyUSB1 set run 1`
+  - Set the logging rate in hertz: `-r / --rate <hertz>`
+  - Setup the ESP32 using a configuration or log file: `-u / --use-cfg <file>`
 
-## Example log output
+#### Example
+
+`mvm-control log -r 20 -u cfg.json run_001.json`
+
+### Console_log
+
+Sets the ESP32 into console mode, and logs the ESP32 debug messages
+
+`mvm-control clog my_log.json`
+
+#### Options
+
+  - Setup the ESP32 using a configuration or log file: `-u / --use-cfg <file>`
+
+#### Example
+
+`mvm-control clog --use-cfg cfg.json run_001.json`
+
+### Load
+
+Loads a JSON configuration files settings into an ESP32.
+
+`mvm-control load <file>`
+
+#### Example
+
+`mvm-control load file.json`
+
+**Note**: This works on configuration files and log files
+
+### Save
+
+Saves an ESP32 configuration to a JSON file
+
+`mvm-control save <file>`
+
+#### Example
+
+`mvm-control save file.json`
+
+## Examples
+
+### log file
 
 ```
 {
