@@ -30,7 +30,7 @@ Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
 """
 
-__version__ = '1.2.1'
+__version__ = '1.2.2'
 
 import serial
 import time
@@ -38,6 +38,7 @@ import argparse
 import sys
 import json
 import signal
+import platform
 import serial.tools.list_ports as list_ports
 
 # Choices allowed for 'get' command
@@ -129,8 +130,10 @@ def _parse_response(ser):
 
     # This might seem absurd, but I need it for my setup with no flow sense
     MAX_RESP_TRIES = 200  # Worst case, no sensors, 170 tries needed
+    TIMEOUT = 5.0  # Don't try for longer than this
     num_tries = 0
-    while(num_tries < MAX_RESP_TRIES):
+    start_time = time.time()
+    while(num_tries < MAX_RESP_TRIES and time.time() < (start_time + TIMEOUT)):
         # Remove the terminator(s)
         # Use read_until() as it should time out
         response = ser.read_until().decode('utf-8').strip()
@@ -398,6 +401,13 @@ def main():
             '--verbose', '-v',
             action='store_true',
             help="Add verbose response, useful for debugging")
+        parser.add_argument(
+            '--force-dtr',
+            type=int,
+            choices=[1, 0],
+            help="Force DTR to 1 or 0"
+        )
+
         subparsers = parser.add_subparsers(
             title='Subcommands',
             help='Commands available')
@@ -512,18 +522,30 @@ def main():
         if(args.port is None and len(get_available_serial_ports()) > 0):
             args.port = get_available_serial_ports()[0]
 
+        if(args.force_dtr is None):
+            plt = platform.system()
+            if plt == "Windows":
+                rts = False
+                dtr = False
+            else:
+                rts = False
+                dtr = True
+        else:
+            rts = False
+            dtr = True if args.force_dtr == 1 else False
+            print("Forcing DTR to " + str(dtr))
         ser = serial.serial_for_url(
             args.port,
             baudrate=115200,
             bytesize=8,
             parity='N',
             stopbits=1,
-            rtscts=False,
-            dsrdtr=True,
+            rtscts=rts,
+            dsrdtr=dtr,
             do_not_open=True,
             timeout=0.5)
-        ser.rts = 0
-        ser.dtr = 1
+        ser.rts = 1 if rts is True else 0
+        ser.dtr = 1 if dtr is True else 0
         ser.open()
     except Exception:
         if(args.port is None):

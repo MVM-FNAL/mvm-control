@@ -33,12 +33,18 @@ The following subcommands are available:
 
 ### Options
 
+  - Force the DTR bit on the serial port, if the board resets every time you issue a command, try forcing this high or low
+
+    `--force-dtr [0/1]`
+
   - Increase the verbosity of output
 
 	`-v / --verbose`
+
   - Specify the serial port to use
 
     `-p / --port <port>`
+
   - Print the version out and exit
 
 	`--version`
