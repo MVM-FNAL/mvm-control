@@ -30,7 +30,7 @@ Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
 """
 
-__version__ = '1.2.0'
+__version__ = '1.2.1'
 
 import serial
 import time
@@ -38,6 +38,7 @@ import argparse
 import sys
 import json
 import signal
+import serial.tools.list_ports as list_ports
 
 # Choices allowed for 'get' command
 choices_for_get = [
@@ -77,6 +78,10 @@ verbose = False
 rate = 10
 ser = None
 terminate = False
+
+
+def get_available_serial_ports():
+    return [comport.device for comport in list_ports.comports()]
 
 
 def signal_handling(signum, frame):
@@ -387,7 +392,6 @@ def main():
             version='%(prog)s ' + __version__)
         parser.add_argument(
             '--port', '-p',
-            default="/dev/ttyUSB0",
             metavar="<port>",
             help="Serial port to connect to")
         parser.add_argument(
@@ -505,6 +509,9 @@ def main():
 
     # Try to establish connection with ESP32
     try:
+        if(args.port is None and len(get_available_serial_ports()) > 0):
+            args.port = get_available_serial_ports()[0]
+
         ser = serial.serial_for_url(
             args.port,
             baudrate=115200,
@@ -519,7 +526,13 @@ def main():
         ser.dtr = 1
         ser.open()
     except Exception:
-        print("Failed to connect to serial port " + args.port)
+        if(args.port is None):
+            print("No serial port available, is the cable unplugged?")
+        else:
+            print("Failed to connect to serial port " + args.port)
+            print("Available serial ports:")
+            print(' \n'.join(
+                [comport.device for comport in list_ports.comports()]))
         exit(-1)
 
     # Run requested subcommand function

@@ -12,7 +12,7 @@ license = "GPL"
 home-page = "https://github.com/MechanicalVentilatorMilano/mvm-control"
 classifiers = ["License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)"]
 requires = [
-    'argparse'
+    'argparse', 'pyserial'
 ]
 
 [tool.flit.scripts]
