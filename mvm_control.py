@@ -30,7 +30,7 @@ Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
 """
 
-__version__ = '1.2.2'
+__version__ = '1.2.3'
 
 import serial
 import time
@@ -253,12 +253,15 @@ def cmd_log(args):
         if(verbose):
             print(resp)
 
+        if(first):
+            start_time_offset = time.time()
+
         # Ugly, but split up the data and use some sort of name that makes
         # sense the variable names used inside the Arduino code are a bit
         # hard to parse/grok
         data_split = resp.split(',')
         args.logfile.write(
-            '{13}{{"time": {14}, "last_pressure": {0}, '
+            '{13}{{"time": {14:.3f}, "last_pressure": {0}, '
             '"last_flow": {1}, "last_o2": {2}, "last_bpm": {3}, '
             '"tidal_volume": {4}, "last_peep": {5}, "temperature": {6}, '
             '"battery_powered": {7}, "current_battery_charge": {8}, '
@@ -278,7 +281,8 @@ def cmd_log(args):
                 data_split[11],
                 data_split[12],
                 '' if first else ',',
-                float(time.time())))
+                0.000 if first else float(time.time()-start_time_offset)))
+
         if(first):
             first = False
 
@@ -335,9 +339,13 @@ def cmd_console_log(args):
         resp = ser.read_until().decode('utf-8').strip()
         if(verbose):
             print(resp)
+
+        if(first):
+            start_time_offset = time.time()
+
         data_split = resp.split(',')
         args.logfile.write(
-            '{11}{{"time": {12}, "ts": {0}, '
+            '{11}{{"time": {12:.3f}, "ts": {0}, '
             '"last_flow": {1}, "last_pressure0": {2}, "last_pressure1": {3}, '
             '"pid_monitor": {4}, "pid_monitor2": {5}, "valve2_status": {6}, '
             '"venturi_flux": {7}, "flow": {8}, '
@@ -354,7 +362,7 @@ def cmd_console_log(args):
                 data_split[9],
                 data_split[10],
                 '' if first else ',',
-                float(time.time())))
+                0.000 if first else float(time.time()-start_time_offset)))
 
         if(first):
             first = False
