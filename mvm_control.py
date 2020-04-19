@@ -46,7 +46,7 @@ raw values read out
 """
 
 
-__version__ = '1.2.4'
+__version__ = '1.3.0'
 
 import serial
 import time
@@ -64,8 +64,10 @@ choices_for_get = [
     'battery', 'version', 'alarm', 'warning',
     'run', 'mode', 'rate', 'ratio',
     'assist_ptrigger', 'assist_flow_min',
-    'ptarget', 'pressure_support', 'backup_enable', 'backup_min_rate',
-    'all', 'calib', 'calibv', 'stats'
+    'ptarget', 'pressure_support', 'backup_enable', 'backup_min_time',
+    'all', 'calib', 'calibv', 'stats',
+    'pause_lg', 'pause_lg_time', 'pause_lg_p', 'ads',
+    'pcv_trigger_enable', 'pcv_trigger', 'pinput',
 ]
 
 # Choices allowed for 'set' command
@@ -79,7 +81,8 @@ choices_for_set = [
     'pause_exhale', 'pid_limit', 'alarm_snooze',
     'alarm', 'watchdog_reset', 'console',
     'timestamp', 'wdenable', 'backup_enable',
-    'backup_min_rate', 'stats_clear'
+    'backup_min_time', 'stats_clear', 'pause_lg_p',
+    'pcv_trigger_enable', 'pcv_trigger'
 ]
 
 # Settings to store when starting a log file
@@ -127,15 +130,19 @@ def set_log_settings(log_file, verbose=False):
                 print("Setting " + setting + " to " +
                       str(settings_to_load[setting]))
             set_mvm_param(ser, setting, settings_to_load[setting])
+        else:
+            if verbose:
+                print("Setting " + str(setting) + " is no longer available")
 
 
 def get_log_settings(settings_to_store):
     """Gets the log settings from the device"""
     settings_resp = {}
-    for setting in settings_to_store:
-        resp = get_mvm_param(ser, setting)
-        if(resp is not False):
-            settings_resp[setting] = resp
+    for setting in choices_for_get:
+        if setting in choices_for_set:
+            resp = get_mvm_param(ser, setting)
+            if(resp is not False):
+                settings_resp[setting] = resp
 
     return settings_resp
 
