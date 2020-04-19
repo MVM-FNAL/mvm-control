@@ -1,15 +1,15 @@
 """
 Simple command line tool to access a MVM ESP32 via the serial port
-There are three available commands
 
-For help on usage type: python mvm_control.py -h
+For help on usage type:
+python mvm_control.py -h
 
-For help on command usage type: python mvm_control.py [get/set/log/clog/load/save] -h
+For help on command usage type:
+python mvm_control.py [get/set/log/clog/load/save] -h
 
 Note: The log command can either output to a log file or stdout
 
 The log format is as follows:
-
 {
     "settings": { ... },
     "data": [
@@ -29,7 +29,7 @@ the time of this writing)
 Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
 
-The compact log format is as follows
+The compact log format is as follows:
 {
     "settings": { ... },
     "format": ['field1','field2', ..., 'fieldN']
