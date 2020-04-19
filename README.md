@@ -79,10 +79,11 @@ Logs the ESP32 response to `get all` to a file, hit CTRL+C to break.
 
   - Set the logging rate in hertz: `-r / --rate <hertz>`
   - Setup the ESP32 using a configuration or log file: `-u / --use-cfg <file>`
+  - Use compact log format: `-c / --compact`
 
 #### Example
 
-`mvm-control log -r 20 -u cfg.json run_001.json`
+`mvm-control log -c -r 20 -u cfg.json run_001.json`
 
 ### Console_log
 
@@ -93,6 +94,7 @@ Sets the ESP32 into console mode, and logs the ESP32 debug messages
 #### Options
 
   - Setup the ESP32 using a configuration or log file: `-u / --use-cfg <file>`
+  - Use compact log format: `-c / --compact`
 
 #### Example
 
