@@ -4,7 +4,7 @@ There are three available commands
 
 For help on usage type: python mvm_control.py -h
 
-For help on command usage type: python mvm_contro.py <get/set/log> -h
+For help on command usage type: python mvm_control.py [get/set/log/clog/load/save] -h
 
 Note: The log command can either output to a log file or stdout
 
@@ -28,7 +28,23 @@ the time of this writing)
 
 Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
+
+The compact log format is as follows
+{
+    "settings": { ... },
+    "format": ['field1','field2', ..., 'fieldN']
+    "data": [
+        [ ... ],
+        [ ... ]
+    ]
+}
+
+Where 'format' is a list of the data array field names
+
+Where 'data' is now an array of arrays, with the inner array consisting of the
+raw values read out
 """
+
 
 __version__ = '1.2.4'
 
@@ -82,10 +98,12 @@ terminate = False
 
 
 def get_available_serial_ports():
+    """Gets the available serial ports"""
     return [comport.device for comport in list_ports.comports()]
 
 
 def signal_handling(signum, frame):
+    """Capture signal and tells log loop to terminate gracefully"""
     global terminate
     terminate = True
 
@@ -94,6 +112,7 @@ signal.signal(signal.SIGINT, signal_handling)
 
 
 def set_log_settings(log_file, verbose=False):
+    """Sends the log settings to the device"""
     try:
         prev_log = json.load(log_file)
     except Exception as e:
@@ -111,6 +130,7 @@ def set_log_settings(log_file, verbose=False):
 
 
 def get_log_settings(settings_to_store):
+    """Gets the log settings from the device"""
     settings_resp = {}
     for setting in settings_to_store:
         resp = get_mvm_param(ser, setting)
@@ -467,16 +487,19 @@ def cmd_console_log(args):
 
 
 def cmd_load(args):
+    """Command that loads the settings to the device"""
     set_log_settings(args.cfgfile)
 
 
 def cmd_save(args):
+    """Command that saves the settings from the device"""
     settings = get_log_settings(settings_to_store)
     args.cfgfile.write(json.dumps({"settings": settings}, indent=2))
     args.cfgfile.close()
 
 
 def main():
+    """Main function"""
     global ser
     global verbose
     global rate
