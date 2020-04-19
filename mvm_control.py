@@ -30,7 +30,7 @@ Each 'data' entry contains the contents of the 'get all' command, and and an
 extra parameter 'time' that is a unix timestamp of when it was received.
 """
 
-__version__ = '1.2.3'
+__version__ = '1.2.4'
 
 import serial
 import time
@@ -151,49 +151,60 @@ def _parse_response(ser):
 
 def get_mvm_param(ser, param):
     """Request the ESP32 get the value for a given parameter and transmit it"""
-    try:
-        request = 'get ' + str(param) + '\r\n'
-        ser.write(request.encode('utf-8'))
-        response = _parse_response(ser)
-    except Exception as e:
-        print("Error communicating with device")
-        print(e)
-        return False
+    num_tries = 0
+    while(num_tries < 3):
+        try:
+            request = 'get ' + str(param) + '\r\n'
+            ser.write(request.encode('utf-8'))
+            response = _parse_response(ser)
+        except Exception as e:
+            print("Error communicating with device")
+            print(e)
+            return False
 
-    if(response is not False):
-        if(response == 'no_data'):
-            print("Invalid or unknown command")
-            return False
-        elif(response[0:5] == 'ERROR'):
-            print(response)
-            return False
-        else:
-            return response
+        if(response is not False):
+            if(response == 'no_data'):
+                print("Invalid or unknown command")
+                return False
+            elif(response[0:5] == 'ERROR'):
+                if verbose:
+                    print("Command Error, Retrying...")
+            else:
+                return response
+        num_tries = num_tries + 1
+
+    print(response)
+    return False
 
 
 def set_mvm_param(ser, param, value):
     """Request the ESP32 set a parameter to a given value"""
-    try:
-        request = 'set ' + str(param) + ' ' + str(value) + '\r\n'
-        ser.write(request.encode('utf-8'))
-        response = _parse_response(ser)
-    except Exception as e:
-        print("Error communicating with device")
-        print(e)
-        return False
-
-    try:
-        if(response is not False):
-            if (response.lower() == 'ok'):
-                return True
-            else:
-                print("Bad or unknown response! (" + str(response) + ")")
-                return False
-        else:
+    num_tries = 0
+    while(num_tries < 3):
+        try:
+            request = 'set ' + str(param) + ' ' + str(value) + '\r\n'
+            ser.write(request.encode('utf-8'))
+            response = _parse_response(ser)
+        except Exception as e:
+            print("Error communicating with device")
+            print(e)
             return False
-    except Exception:
-        print("Error parsing response! (" + str(response) + ")")
-        return False
+
+        try:
+            if(response is not False):
+                if (response.lower() == 'ok'):
+                    return True
+                elif(verbose):
+                    print("Command Error, Retrying...")
+            else:
+                return False
+        except Exception:
+            print("Error parsing response! (" + str(response) + ")")
+            return False
+        num_tries = num_tries + 1
+
+    print("Bad or unknown response! (" + str(response) + ")")
+    return False
 
 
 def cmd_get(args):
@@ -238,11 +249,30 @@ def cmd_log(args):
     settings_resp = get_log_settings(settings_to_store)
 
     # Dump out the settings to the log file
-    args.logfile.write("{\"settings\": " + json.dumps(settings_resp))
+    args.logfile.write("{\n  \"settings\": " +
+                       json.dumps(settings_resp, indent=2) + ",\n")
 
     # Start the data portion of the log file
 
-    args.logfile.write(",\"data\": [\n")
+    if(args.compact):
+        args.logfile.write(
+            '\"format\": ['
+            '\"time\",'
+            '\"p_patient\",'
+            '\"f_total\",'
+            '\"o2\",'
+            '\"bpm\",'
+            '\"v_total\",'
+            '\"peep\",'
+            '\"temp\",'
+            '\"bat_pwr\",'
+            '\"bat_charge\",'
+            '\"p_peak\",'
+            '\"v_total_insp\",'
+            '\"v_total_exhl\",'
+            '\"f_peak\"],\n')
+
+    args.logfile.write("\"data\": [\n")
     first = True  # Used to print the ',' between entries
 
     while(1):
@@ -260,28 +290,50 @@ def cmd_log(args):
         # sense the variable names used inside the Arduino code are a bit
         # hard to parse/grok
         data_split = resp.split(',')
-        args.logfile.write(
-            '{13}{{"time": {14:.3f}, "last_pressure": {0}, '
-            '"last_flow": {1}, "last_o2": {2}, "last_bpm": {3}, '
-            '"tidal_volume": {4}, "last_peep": {5}, "temperature": {6}, '
-            '"battery_powered": {7}, "current_battery_charge": {8}, '
-            '"current_p_peak": {9}, "current_t_visnp": {10}, '
-            '"current_t_vesp": {11}, "current_vm": {12}}}\n'.format(
-                data_split[0],
-                data_split[1],
-                data_split[2],
-                data_split[3],
-                data_split[4],
-                data_split[5],
-                data_split[6],
-                data_split[7],
-                data_split[8],
-                data_split[9],
-                data_split[10],
-                data_split[11],
-                data_split[12],
-                '' if first else ',',
-                0.000 if first else float(time.time()-start_time_offset)))
+
+        if(args.compact):
+            args.logfile.write(
+                '{13}[{14:.3f},{0},{1},{2},{3},{4},'
+                '{5},{6},{7},{8},{9},{10},{11},{12}]\n'.format(
+                    data_split[0],
+                    data_split[1],
+                    data_split[2],
+                    data_split[3],
+                    data_split[4],
+                    data_split[5],
+                    data_split[6],
+                    data_split[7],
+                    data_split[8],
+                    data_split[9],
+                    data_split[10],
+                    data_split[11],
+                    data_split[12],
+                    ' ' if first else ',',
+                    0.000 if first else float(time.time()-start_time_offset)))
+
+        else:
+            args.logfile.write(
+                '{13}{{"time":{14:.3f},"p_patient":{0},'
+                '"f_total":{1},"o2":{2},"bpm":{3},'
+                '"v_total":{4},"peep":{5},"temp":{6},'
+                '"bat_pwr":{7},"bat_charge":{8},'
+                '"p_peak":{9},"v_total_insp":{10},'
+                '"v_total_exhl":{11},"f_peak":{12}}}\n'.format(
+                    data_split[0],
+                    data_split[1],
+                    data_split[2],
+                    data_split[3],
+                    data_split[4],
+                    data_split[5],
+                    data_split[6],
+                    data_split[7],
+                    data_split[8],
+                    data_split[9],
+                    data_split[10],
+                    data_split[11],
+                    data_split[12],
+                    ' ' if first else ',',
+                    0.000 if first else float(time.time()-start_time_offset)))
 
         if(first):
             first = False
@@ -314,10 +366,27 @@ def cmd_console_log(args):
     settings_resp = get_log_settings(settings_to_store)
 
     # Dump out the settings to the log file
-    args.logfile.write("{\"settings\": " + json.dumps(settings_resp))
+    args.logfile.write("{\n  \"settings\": \n" +
+                       json.dumps(settings_resp, indent=2) + ",\n")
+
+    if(args.compact):
+        args.logfile.write(
+            '\"format\": ['
+            '\"time\",'
+            '\"ts\",'
+            '\"flux_inhale\",'
+            '\"p_valve\",'
+            '\"p_patient\",'
+            '\"pv1_ctrl\",'
+            '\"p_slow\",'
+            '\"pv2_ctrl\",'
+            '\"f_vent_raw\",'
+            '\"f_total\",'
+            '\"v_total\",'
+            '\"p_patient_dv2\"],\n')
 
     # Start the data portion of the log file
-    args.logfile.write(",\"data\": [\n")
+    args.logfile.write("\"data\": [\n")
     first = True  # Used to print the ',' between entries
 
     # Start up console logger
@@ -344,25 +413,44 @@ def cmd_console_log(args):
             start_time_offset = time.time()
 
         data_split = resp.split(',')
-        args.logfile.write(
-            '{11}{{"time": {12:.3f}, "ts": {0}, '
-            '"last_flow": {1}, "last_pressure0": {2}, "last_pressure1": {3}, '
-            '"pid_monitor": {4}, "pid_monitor2": {5}, "valve2_status": {6}, '
-            '"venturi_flux": {7}, "flow": {8}, '
-            '"tidal_volume": {9}, "dgb_delta": {10}}}\n'.format(
-                data_split[0],
-                data_split[1],
-                data_split[2],
-                data_split[3],
-                data_split[4],
-                data_split[5],
-                data_split[6],
-                data_split[7],
-                data_split[8],
-                data_split[9],
-                data_split[10],
-                '' if first else ',',
-                0.000 if first else float(time.time()-start_time_offset)))
+
+        if(args.compact):
+            args.logfile.write(
+                '{11}[{12:.3f},{0},{1},{2},{3},'
+                '{4},{5},{6},{7},{8},{9},{10}]\n'.format(
+                    data_split[0],
+                    data_split[1],
+                    data_split[2],
+                    data_split[3],
+                    data_split[4],
+                    data_split[5],
+                    data_split[6],
+                    data_split[7],
+                    data_split[8],
+                    data_split[9],
+                    data_split[10],
+                    ' ' if first else ',',
+                    0.000 if first else float(time.time()-start_time_offset)))
+        else:
+            args.logfile.write(
+                '{11}{{"time":{12:.3f},"ts":{0},'
+                '"flux_inhale":{1},"p_valve":{2},"p_patient":{3},'
+                '"pv1_ctrl":{4},"p_slow":{5},"pv2_ctrl":{6},'
+                '"f_vent_raw":{7},"f_total":{8},'
+                '"v_total":{9},"p_patient_dv2":{10}}}'.format(
+                    data_split[0],
+                    data_split[1],
+                    data_split[2],
+                    data_split[3],
+                    data_split[4],
+                    data_split[5],
+                    data_split[6],
+                    data_split[7],
+                    data_split[8],
+                    data_split[9],
+                    data_split[10],
+                    '' if first else ',',
+                    0.000 if first else float(time.time()-start_time_offset)))
 
         if(first):
             first = False
@@ -384,9 +472,7 @@ def cmd_load(args):
 
 def cmd_save(args):
     settings = get_log_settings(settings_to_store)
-    args.cfgfile.write('{"settings": ')
-    args.cfgfile.write(json.dumps(settings))
-    args.cfgfile.write('}')
+    args.cfgfile.write(json.dumps({"settings": settings}, indent=2))
     args.cfgfile.close()
 
 
@@ -475,6 +561,12 @@ def main():
             usage="%(prog)s [option] <file>",
             help="log [option] <file>")
         parser_log.add_argument(
+            '-c',
+            '--compact',
+            action='store_true',
+            help="Generate compact log"
+        )
+        parser_log.add_argument(
             '-r',
             '--rate',
             default=10,
@@ -500,6 +592,12 @@ def main():
             'clog',
             usage="%(prog)s [option] <file>",
             help="clog [option] <file>")
+        parser_clog.add_argument(
+            '-c',
+            '--compact',
+            action='store_true',
+            help="Generate compact log"
+        )
         parser_clog.add_argument(
             '-u',
             '--use-cfg',
