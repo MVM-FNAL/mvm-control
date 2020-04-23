@@ -46,7 +46,7 @@ raw values read out
 """
 
 
-__version__ = '1.3.0'
+__version__ = '1.3.1'
 
 import serial
 import time
@@ -64,10 +64,8 @@ choices_for_get = [
     'battery', 'version', 'alarm', 'warning',
     'run', 'mode', 'rate', 'ratio',
     'assist_ptrigger', 'assist_flow_min',
-    'ptarget', 'pressure_support', 'backup_enable', 'backup_min_time',
-    'all', 'calib', 'calibv', 'stats',
-    'pause_lg', 'pause_lg_time', 'pause_lg_p', 'ads',
-    'pcv_trigger_enable', 'pcv_trigger', 'pinput',
+    'ptarget', 'pressure_support', 'backup_enable', 'backup_min_rate',
+    'all', 'calib', 'calibv', 'stats'
 ]
 
 # Choices allowed for 'set' command
@@ -81,17 +79,18 @@ choices_for_set = [
     'pause_exhale', 'pid_limit', 'alarm_snooze',
     'alarm', 'watchdog_reset', 'console',
     'timestamp', 'wdenable', 'backup_enable',
-    'backup_min_time', 'stats_clear', 'pause_lg_p',
-    'pcv_trigger_enable', 'pcv_trigger'
+    'backup_min_rate', 'stats_clear'
 ]
 
 # Settings to store when starting a log file
+"""
 settings_to_store = [
     'backup', 'power_mode', 'battery', 'version', 'alarm', 'warning',
     'run', 'mode', 'rate', 'ratio', 'assist_ptrigger',
     'assist_flow_min', 'ptarget', 'pressure_support', 'backup_enable',
     'backup_min_rate'
 ]
+"""
 
 # Verbosity option
 verbose = False
@@ -102,7 +101,12 @@ terminate = False
 
 def get_available_serial_ports():
     """Gets the available serial ports"""
-    return [comport.device for comport in list_ports.comports()]
+    ports = [comport.device for comport in list_ports.comports()]
+    # Mac OSX seems to have this com port, and it messes things up
+    # so hide it from the list of choices
+    if '/dev/cu.Bluetooth-Incoming-Port' in ports:
+        ports.remove('/dev/cu.Bluetooth-Incoming-Port')
+    return ports
 
 
 def signal_handling(signum, frame):
@@ -125,7 +129,7 @@ def set_log_settings(log_file, verbose=False):
     settings_to_load = prev_log["settings"]
     for setting in settings_to_load:
         # Write all settable settings back to ESP32
-        if setting in choices_for_set:
+        if setting in choices_for_set and setting != "run":
             if verbose:
                 print("Setting " + setting + " to " +
                       str(settings_to_load[setting]))
@@ -135,11 +139,11 @@ def set_log_settings(log_file, verbose=False):
                 print("Setting " + str(setting) + " is no longer available")
 
 
-def get_log_settings(settings_to_store):
+def get_log_settings():
     """Gets the log settings from the device"""
     settings_resp = {}
     for setting in choices_for_get:
-        if setting in choices_for_set:
+        if setting in choices_for_set and setting != "run":
             resp = get_mvm_param(ser, setting)
             if(resp is not False):
                 settings_resp[setting] = resp
@@ -173,6 +177,7 @@ def _parse_response(ser):
             pass
 
         num_tries = num_tries + 1
+
     return False
 
 
@@ -198,9 +203,9 @@ def get_mvm_param(ser, param):
                     print("Command Error, Retrying...")
             else:
                 return response
+
         num_tries = num_tries + 1
 
-    print(response)
     return False
 
 
@@ -268,12 +273,19 @@ def cmd_log(args):
     else:
         verbose = False
 
+    # If the run is active, turn it off and wait a bit
+    # so the device can settle before restart
+    if(not args.override_run):
+        if get_mvm_param(ser, "run") == "1":
+            set_mvm_param(ser, "run", 0)
+            time.sleep(5)
+
     # Should we configure the ESP32 with settings from a previous logfile?
     if(args.use_cfg is not None):
         set_log_settings(args.use_cfg, verbose)
 
     # Run through the dict getting our responses
-    settings_resp = get_log_settings(settings_to_store)
+    settings_resp = get_log_settings()
 
     # Dump out the settings to the log file
     args.logfile.write("{\n  \"settings\": " +
@@ -301,6 +313,9 @@ def cmd_log(args):
 
     args.logfile.write("\"data\": [\n")
     first = True  # Used to print the ',' between entries
+
+    # Start run
+    set_mvm_param(ser, "run", 1)
 
     while(1):
         resp = get_mvm_param(ser, 'all')
@@ -365,9 +380,14 @@ def cmd_log(args):
         if(first):
             first = False
 
-        if terminate:
+        if terminate or (
+            (args.time != 0) and time.time() >= (start_time_offset + args.time)
+        ):
             args.logfile.write("]}\n")
             args.logfile.close()
+            if(not args.override_run):
+                set_mvm_param(ser, "run", 0)
+            print('')
             exit(0)
 
         time.sleep(rate)
@@ -385,12 +405,19 @@ def cmd_console_log(args):
     else:
         verbose = False
 
+    # If the run is active, turn it off and wait a bit
+    # so the device can settle before restart
+    if(not args.override_run):
+        if get_mvm_param(ser, "run") == "1":
+            set_mvm_param(ser, "run", 0)
+            time.sleep(5)
+
     # Should we configure the ESP32 with settings from a previous logfile?
     if(args.use_cfg is not None):
         set_log_settings(args.use_cfg)
 
     # Run through the dict getting our responses
-    settings_resp = get_log_settings(settings_to_store)
+    settings_resp = get_log_settings()
 
     # Dump out the settings to the log file
     args.logfile.write("{\n  \"settings\": \n" +
@@ -415,6 +442,9 @@ def cmd_console_log(args):
     # Start the data portion of the log file
     args.logfile.write("\"data\": [\n")
     first = True  # Used to print the ',' between entries
+
+    # Start run
+    set_mvm_param(ser, "run", 1)
 
     # Start up console logger
     resp = set_mvm_param(ser, 'console', 1)
@@ -482,11 +512,16 @@ def cmd_console_log(args):
         if(first):
             first = False
 
-        if terminate:
+        if terminate or (
+            (args.time != 0) and time.time() >= (start_time_offset + args.time)
+        ):
             # Turn off console logging
             set_mvm_param(ser, 'console', 0)
             args.logfile.write("]}\n")
             args.logfile.close()
+            if(not args.override_run):
+                set_mvm_param(ser, "run", 0)
+            print('')
             exit(0)
 
         # Brief sleep so this script doesn't lock up CPU
@@ -500,7 +535,7 @@ def cmd_load(args):
 
 def cmd_save(args):
     """Command that saves the settings from the device"""
-    settings = get_log_settings(settings_to_store)
+    settings = get_log_settings()
     args.cfgfile.write(json.dumps({"settings": settings}, indent=2))
     args.cfgfile.close()
 
@@ -594,8 +629,25 @@ def main():
             '-c',
             '--compact',
             action='store_true',
-            help="Generate compact log"
-        )
+            help="Generate compact log")
+        parser_log.add_argument(
+            '-o',
+            '--override-run',
+            action='store_true',
+            help="Override run 0 on end-of-log")
+        parser_log.add_argument(
+            '-u',
+            '--use-cfg',
+            metavar="<file>",
+            type=argparse.FileType('r'),
+            help="Use config file or previous log to configure device")
+        parser_log.add_argument(
+            '-t',
+            '--time',
+            metavar="<time>",
+            type=int,
+            default=0,
+            help="Time to run in seconds, may be fractional")
         parser_log.add_argument(
             '-r',
             '--rate',
@@ -603,12 +655,6 @@ def main():
             type=int,
             metavar="<rate>",
             help="Logging rate in hertz")
-        parser_log.add_argument(
-            '-u',
-            '--use-cfg',
-            metavar="<file>",
-            type=argparse.FileType('r'),
-            help="Use config file or previous log to configure device")
         parser_log.add_argument(
             'logfile',
             nargs='?',
@@ -626,14 +672,25 @@ def main():
             '-c',
             '--compact',
             action='store_true',
-            help="Generate compact log"
-        )
+            help="Generate compact log")
+        parser_clog.add_argument(
+            '-o',
+            '--override-run',
+            action='store_true',
+            help="Override run 0 on end-of-log")
         parser_clog.add_argument(
             '-u',
             '--use-cfg',
             metavar="<file>",
             type=argparse.FileType('r'),
             help="Use config file or previous log to configure device")
+        parser_clog.add_argument(
+            '-t',
+            '--time',
+            metavar="<time>",
+            type=int,
+            default=0,
+            help="Time to run in seconds, may be fractional")
         parser_clog.add_argument(
             'logfile',
             nargs='?',
@@ -689,8 +746,7 @@ def main():
         else:
             print("Failed to connect to serial port " + args.port)
             print("Available serial ports:")
-            print(' \n'.join(
-                [comport.device for comport in list_ports.comports()]))
+            print(' \n'.join(get_available_serial_ports()))
         exit(-1)
 
     # Run requested subcommand function
