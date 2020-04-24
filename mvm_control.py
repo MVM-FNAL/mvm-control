@@ -1,3 +1,4 @@
+#!/usr/bin/python3
 """
 Simple command line tool to access a MVM ESP32 via the serial port
 
@@ -437,7 +438,8 @@ def cmd_console_log(args):
             '\"f_vent_raw\",'
             '\"f_total\",'
             '\"v_total\",'
-            '\"p_patient_dv2\"],\n')
+            '\"p_patient_dv2\"'
+            '\"sp2_dp\"],\n') # adding sp2_dp
 
     # Start the data portion of the log file
     args.logfile.write("\"data\": [\n")
@@ -473,8 +475,8 @@ def cmd_console_log(args):
 
         if(args.compact):
             args.logfile.write(
-                '{11}[{12:.3f},{0},{1},{2},{3},'
-                '{4},{5},{6},{7},{8},{9},{10}]\n'.format(
+                '{12}[{13:.3f},{0},{1},{2},{3},'
+                '{4},{5},{6},{7},{8},{9},{10},{11}]\n'.format(
                     data_split[0],
                     data_split[1],
                     data_split[2],
@@ -486,15 +488,16 @@ def cmd_console_log(args):
                     data_split[8],
                     data_split[9],
                     data_split[10],
+                    data_split[11], # adding sp2_dp
                     ' ' if first else ',',
                     0.000 if first else float(time.time()-start_time_offset)))
         else:
             args.logfile.write(
-                '{11}{{"time":{12:.3f},"ts":{0},'
+                '{12}{{"time":{13:.3f},"ts":{0},'
                 '"flux_inhale":{1},"p_valve":{2},"p_patient":{3},'
                 '"pv1_ctrl":{4},"p_slow":{5},"pv2_ctrl":{6},'
                 '"f_vent_raw":{7},"f_total":{8},'
-                '"v_total":{9},"p_patient_dv2":{10}}}'.format(
+                '"v_total":{9},"p_patient_dv2":{10},"sp2_dp":{11}}}'.format(
                     data_split[0],
                     data_split[1],
                     data_split[2],
@@ -506,6 +509,7 @@ def cmd_console_log(args):
                     data_split[8],
                     data_split[9],
                     data_split[10],
+                    data_split[11], # adding sp2_dp
                     '' if first else ',',
                     0.000 if first else float(time.time()-start_time_offset)))
 
